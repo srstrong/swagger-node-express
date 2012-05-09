@@ -2,37 +2,44 @@
  * this is a JSON schema for the PetModel
  */
 exports.pet = {
-  "properties" : {
-    "id" : {
-      "type" : "long"
+    "properties" : {
+	"id" : {
+	    "type" : "long"
+	},
+	"status" : {
+	    "type" : "string",
+	    "description" : "pet status in the store",
+	    "enum" : [ "available", "pending", "sold" ]
+	},
+	"name" : {
+	    "type" : "string"
+	},
+	"tags" : {
+	    "type" : "array",
+	    "items" : {
+		"type" : "string"
+	    }
+	},    
+	"visits" : {
+	    "type" : "array",
+	    "items" : {
+		"type" : "date"
+	    }
+	},
+	"photos" : {
+	    "type" : "array",
+	    "items" : {
+		"type" : "string"
+	    }
+	},
+	"address" : {
+	    "type" : "json",
+	    "json" : {
+		"house" : {"type" : "string"},
+		"city" : {"type" : "string"}
+	    }
+	}
     },
-    "status" : {
-      "type" : "string",
-      "description" : "pet status in the store",
-      "enum" : [ "available", "pending", "sold" ]
-    },
-    "name" : {
-      "type" : "string"
-    },
-    "tags" : {
-      "type" : "array",
-      "items" : {
-        "type" : "string"
-      }
-    },    
-    "visits" : {
-      "type" : "array",
-      "items" : {
-        "type" : "date"
-      }
-    },
-    "photos" : {
-      "type" : "array",
-      "items" : {
-        "type" : "string"
-      }
-    }
-  },
-  "id" : "pet"
+    "id" : "pet"
 };
 
