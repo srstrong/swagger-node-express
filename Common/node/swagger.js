@@ -1,3 +1,5 @@
+var calendappModels = require('../../Apps/calendapp//models.js');
+
 var resourcePath = "/resources.json";
 var basePath = "/";
 var swaggerVersion = "1.1-SNAPSHOT.121026";
@@ -24,10 +26,17 @@ for (var i = 0; i < allowedDataTypes.length; i++) {
  * @param av
  */
 function configure(app, bp, av) {
+
     basePath = bp;
     apiVersion = av;
     setResourceListingPaths(app);
     app.get(resourcePath, resourceListing);
+    app.options("*", function(req, res) {
+	res.header('Access-Control-Allow-Origin', '*');
+	res.header('Access-Control-Allow-Headers', 'Content-Type');
+	res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
+	res.send();
+    });
 }
 
 /**
@@ -39,10 +48,12 @@ function setResourceListingPaths(app) {
 
     for (var key in resources) {
 
-	app.get("/" + key.replace("\.\{format\}", ".json"), function(req, res) {
+	app.get("/" + key.replace("\.\{format\}", ".json") + ".spec", function(req, res) {
+
 	    res.header('Access-Control-Allow-Origin', "*");
 	    res.header("Content-Type", "application/json; charset=utf-8");
 	    var key = req.url.substr(1).replace('.json', '.{format}').split('?')[0];
+	    key = key.substr(0, key.length - 5);
 	    var data = applyFilter(req, res, resources[key]);
 
 	    if (data.code) {
@@ -106,37 +117,26 @@ function containerByModel(model, withData, withRandom) {
     var item = {};
 
     for (var key in model.properties) {
+
 	var curType = model.properties[key].type.toLowerCase();
 
 	var value = '';
+
 	if (withData && withData[key]) {
-	    value = withData[key]; }
+	    value = withData[key]; 
+	}
 	if (value == '' && withRandom) {  
+	    
 	    var cache = getCache(curType, withRandom, key);
+
 	    if (cache) {
 		value = cache;
-	    } else {
-		if (model.properties[key].enum) {
-		    value = model.properties[key].enum[Randomizer.intBetween(0, model.properties[key].enum.length-1)];
-		} 
-		else if (curType == "json") {
-		    value = containerByModel({properties : model.properties[key].json}, withData, withRandom);
-		}
-		else {
-		    var subType = false;
+	    } 
+	    else {
 
-		    if (model.properties[key].items && model.properties[key].items.type) {
-			subType = model.properties[key].items.type; 
-		    }
+		var subType = (curType == "array") ?model.properties[key].items.type : false;
 
-		    if (subType == "json") {
-			value = new Array();
-			value.push(containerByModel({properties : model.properties[key].items.json}, withData, withRandom));
-		    }
-		    else {
-			value = randomDataByType(curType, withRandom, subType);
-		    }
-		}
+		value = get_random(curType, subType, withData, withRandom);
 	    }
 	    setCache(curType, withRandom, key, value);
 	}
@@ -149,6 +149,31 @@ function containerByModel(model, withData, withRandom) {
     } 
     
     return item;
+}
+
+function get_random(type, subType, withData, withRandom)
+{
+    var value;
+
+/*
+    if (model.properties[key].enum) {
+	value = model.properties[key].enum[Randomizer.intBetween(0, model.properties[key].enum.length-1)];
+    } 
+    else*/ if (type == "array") {
+	value = new Array();
+	value.push(get_random(subType, false, withData, withRandom));
+    }
+    else if (allowedDataTypes.indexOf(type)<0) {
+
+	var model = calendappModels[type];
+
+	value = containerByModel(model, withData, withRandom);
+    }
+    else {
+	value = randomDataByType(type, withRandom, false);
+    }
+
+    return value;
 }
 
 /**
@@ -176,6 +201,10 @@ function applyFilter(req, res, r) {
 	}
     }
 
+    r.basePath = basePath;
+    r.swaggerVersion = swaggerVersion;
+    r.apiVersion = apiVersion;
+
     //  only filter if there are paths to exclude
     if (excludedPaths.length > 0) {
 	//  clone attributes if any
@@ -183,11 +212,8 @@ function applyFilter(req, res, r) {
 
 	//  clone models
 	var requiredModels = Array();
-	
+
 	//  clone methods that have access
-	output.basePath = basePath;
-	output.swaggerVersion = swaggerVersion;
-	output.apiVersion = apiVersion;
 
 	output.apis = new Array();
 	var apis = JSON.parse(JSON.stringify(r.apis));
@@ -223,6 +249,7 @@ function applyFilter(req, res, r) {
 		    if (model && model.responseClass.properties) {
 			for (var key in model.responseClass.properties) {
 			    var t = model.responseClass.properties[key].type;
+
 			    switch (t){
 			    case "array":
 				if (model.responseClass.properties[key].items) {
@@ -303,7 +330,7 @@ function resourceListing(request, response) {
 
     for (var key in resources) {
 	r.apis.push({
-	    "path" : "/" + key,
+	    "path" : "/" + key + ".spec",
 	    "description" : "none"
 	});
     }
@@ -327,6 +354,7 @@ function addMethod(app, callback, spec) {
     if (root && root.apis) {
 	for (var key in root.apis) {
 	    var api = root.apis[key];
+
 	    if (api && api.path == spec.path && api.method == spec.method) {
 		// found matching path and method, add & return
 		appendToApi(root, api, spec);
@@ -336,6 +364,7 @@ function addMethod(app, callback, spec) {
     }
 
     var api = {"path" : spec.path};
+
     if (!resources[rootPath]) {
 	root = {"apis" : new Array()};
 	resources[rootPath] = root;
@@ -389,6 +418,7 @@ function addHandlers(type, handlers) {
 	var handler = handlers[i];
 
 	handler.spec.method = type;
+
 	addMethod(appHandler, handler.action, handler.spec);
     }
 }
@@ -517,6 +547,8 @@ function appendToApi(rootResource, api, spec) {
 	}
     }
 
+    deep_fill_models(specModels);
+
     for (var i in specModels)
     {
 	var specModel = specModels[i];
@@ -536,10 +568,37 @@ function appendToApi(rootResource, api, spec) {
 function model_exists(list, model) {
 
     for (var key in list) {
-	if (list[key].name == specModel.name)
+	if (list[key].name == model.name)
 	    return true;
     }
     return false;
+}
+
+function deep_fill_models(specModels) {
+
+    for (var i in specModels) {
+	var model = specModels[i];
+
+	if (model.responseClass != undefined) {
+	    for (var j in model.responseClass.properties) {
+
+ 		var property = model.responseClass.properties[j];
+
+		var type = property.type.toLowerCase();
+
+		if (allowedDataTypes.indexOf(type)<0) {
+
+		    var child = {name : property.type,
+				 responseClass: calendappModels[property.type]};
+
+		    if (!model_exists(specModels, child))
+		    {
+			specModels.push(child);
+		    }
+		}
+	    }
+	}
+    }
 }
 
 function createEnum(input) {
@@ -556,17 +615,26 @@ function createEnum(input) {
 
 exports.queryParam = function(name, description, dataType, required,
 			      allowMultiple, allowableValues, defaultValue) {
-    return {
+
+    var param = {
 	"name" : name,
 	"description" : description,
 	"dataType" : dataType,
 	"required" : required,
 	"allowMultiple" : allowMultiple,
-	"allowableValues" : {valueType : "LIST",
-			     values : createEnum(allowableValues)},
 	"defaultValue" : defaultValue,
 	"paramType" : "query"
     };
+
+    var allowableValues = createEnum(allowableValues);
+
+    if (allowableValues) {
+
+	param.allowableValues = {valueType : "LIST",
+				 values : allowableValues};
+    }
+
+    return param;
 }
 
 exports.pathParam = function(name, description, dataType, allowableValues) {
